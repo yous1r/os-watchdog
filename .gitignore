@@ -1,1 +1,5 @@
 /target
+.os-watchdog.key
+os-watchdog.db
+config.yaml
+test_*.rs

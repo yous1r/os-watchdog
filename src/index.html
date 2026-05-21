@@ -2,79 +2,726 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>os-watchdog Web Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+    <title>os-watchdog Master Control</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap');
         body {
-            margin: 0; padding: 20px;
+            margin: 0; padding: 0;
             font-family: 'Inter', sans-serif;
             background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
             color: #eee;
-            min-height: 100vh;
+            height: 100vh;
+            height: 100dvh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: row;
         }
-        h1 { text-align: center; font-weight: 800; font-size: 2.5rem; letter-spacing: -1px; margin-bottom: 30px; text-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        .hidden { display: none !important; }
+        
+        /* Mobile toggle for sidebar */
+        #mobile-menu-btn {
+            display: none;
+            background: none; border: none; color: #00C9FF; font-size: 1.5rem; cursor: pointer;
+            margin-right: 15px;
+        }
+
+        .sidebar {
+            width: 25vw;
+            min-width: 200px;
+            max-width: 300px;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(10px);
+            padding: 2vh 1vw 0 1vw; /* Remove bottom padding to ensure lang-switch sits at the very bottom */
+            border-right: 1px solid rgba(255,255,255,0.1);
+            display: flex;
+            flex-direction: column;
+            z-index: 100;
+            box-sizing: border-box;
+        }
+        .sidebar h2 { margin-top: 0; font-size: 1.5rem; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1.5vh; flex-shrink: 0;}
+        
+        .sidebar-actions { margin-bottom: 2vh; flex-shrink: 0; }
+        .node-list { list-style: none; padding: 0; margin: 0; flex-shrink: 0; }
+        
+        /* Groups inside sidebar */
+        .group-header {
+            font-size: 0.8rem; color: #888; text-transform: uppercase; font-weight: 800;
+            margin-top: 2vh; margin-bottom: 1vh; padding-left: 5px;
+        }
+
+        .node-list li {
+            padding: 1.2vh 1vw;
+            margin-bottom: 1vh;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .node-list li:hover { background: rgba(255,255,255,0.15); }
+        .node-list li.active { background: rgba(255,255,255,0.2); border-left: 4px solid #00C9FF; }
+        
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #92FE9D; flex-shrink: 0;}
+        .status-dot.offline { background: #f12711; }
+
+        .btn {
+            width: 100%; padding: 1.2vh; border: none; border-radius: 8px;
+            background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%);
+            color: #000; font-weight: 600; cursor: pointer;
+            transition: transform 0.2s; margin-bottom: 1.5vh;
+        }
+        .btn:hover { transform: translateY(-2px); }
+        .btn-small { padding: 0.8vh; font-size: 0.85rem; border-radius: 4px; }
+        .btn-outline { background: transparent; border: 1px solid #00C9FF; color: #00C9FF; }
+        .btn-outline:hover { background: rgba(0,201,255,0.1); }
+
+        .lang-switch {
+            display: flex; justify-content: center; gap: 10px; margin-bottom: 1vh;
+        }
+        .lang-switch span {
+            cursor: pointer; color: #aaa; font-size: 0.9rem; transition: color 0.2s;
+        }
+        .lang-switch span:hover, .lang-switch span.active { color: #00C9FF; font-weight: bold; }
+
+        .main-content { flex: 1; padding: 3vh 3vw; overflow-y: auto; width: 100%; min-width: 0; box-sizing: border-box; }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3vh; flex-shrink: 0; }
+        h1 { font-weight: 800; font-size: 2.5rem; letter-spacing: -1px; margin:0; text-shadow: 0 0 10px rgba(0,0,0,0.5); display: flex; align-items: center;}
+        
+        .summary-group-title {
+            font-size: 1.5rem; font-weight: 600; border-bottom: 2px solid rgba(255,255,255,0.1);
+            padding-bottom: 1vh; margin-top: 4vh; margin-bottom: 2vh; color: #00C9FF;
+        }
+
         .grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px;
-            max-width: 1200px; margin: 0 auto;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2vw;
+            max-width: 100%; min-width: 0;
         }
+        .summary-card { max-width: 400px; } /* Constraint width for summary cards */
+
         .card {
             background: rgba(255, 255, 255, 0.05);
             backdrop-filter: blur(10px);
-            border-radius: 16px; padding: 20px;
+            border-radius: 16px; padding: 2vh 2vw;
             border: 1px solid rgba(255, 255, 255, 0.1);
             box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
             transition: transform 0.2s, box-shadow 0.2s;
+            display: flex; flex-direction: column;
+            box-sizing: border-box;
+            min-width: 0; /* Allow card to shrink below content width if needed */
         }
         .card:hover { transform: translateY(-5px); box-shadow: 0 12px 40px 0 rgba(0, 0, 0, 0.4); }
-        .card-header { font-size: 1.2rem; font-weight: 600; margin-bottom: 15px; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 10px; }
-        .metric-row { display: flex; justify-content: space-between; margin-bottom: 10px; align-items: center; }
+        .card-header { font-size: 1.2rem; font-weight: 600; margin-bottom: 1.5vh; color: #fff; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1vh; }
+        .metric-row { display: flex; justify-content: space-between; margin-bottom: 1vh; align-items: center; }
         .metric-label { color: #aaa; font-size: 0.9rem; }
         .metric-value { font-weight: 600; font-size: 1.1rem; }
-        .progress-bar-bg { background: rgba(0,0,0,0.3); border-radius: 8px; height: 10px; width: 100%; overflow: hidden; margin-top: 5px; }
+        .progress-bar-bg { background: rgba(0,0,0,0.3); border-radius: 8px; height: 10px; width: 100%; overflow: hidden; margin-top: 0.5vh; }
         .progress-bar-fg { background: linear-gradient(90deg, #00C9FF 0%, #92FE9D 100%); height: 100%; width: 0%; transition: width 0.3s ease; }
         .cpu-fg { background: linear-gradient(90deg, #f12711 0%, #f5af19 100%); }
         .mem-fg { background: linear-gradient(90deg, #8E2DE2 0%, #4A00E0 100%); }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.85rem; }
-        th, td { text-align: left; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        
+        .alerts-area { margin-top: auto; padding-top: 1.5vh; font-size: 0.85rem; min-height: 20px;}
+        
+        table { width: 100%; border-collapse: collapse; margin-top: 1vh; font-size: 0.85rem; }
+        th, td { text-align: left; padding: 1vh 1vw; border-bottom: 1px solid rgba(255,255,255,0.05); }
         th { color: #aaa; font-weight: 400; }
         .badge { background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; }
+
+        /* Modal Styles */
+        .modal {
+            display: none; position: fixed; z-index: 200; left: 0; top: 0; width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.7); backdrop-filter: blur(5px);
+        }
+        .modal-content {
+            background: #1a2a30; margin: 10vh auto; padding: 3vh 3vw; border-radius: 16px;
+            width: 90vw; max-width: 400px; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 10px 50px rgba(0,0,0,0.5);
+            box-sizing: border-box;
+        }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: #fff; }
+        .form-group { margin-bottom: 1.5vh; }
+        .form-group label { display: block; margin-bottom: 0.5vh; color: #ccc; font-size: 0.9rem; }
+        .form-group input { 
+            width: 100%; padding: 1.2vh; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2);
+            background: rgba(0,0,0,0.2); color: #fff; box-sizing: border-box; font-family: 'Inter', sans-serif;
+        }
+        #deploy-status { margin-top: 1.5vh; font-size: 0.9rem; color: #00C9FF; word-break: break-word;}
+
+        /* Full Screen Overlays */
+        .overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; height: 100dvh;
+            background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+            z-index: 9999; display: flex; align-items: center; justify-content: center;
+        }
+        .overlay-box {
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(15px);
+            padding: 4vh 4vw; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1);
+            box-shadow: 0 10px 50px rgba(0,0,0,0.5); width: 90vw; max-width: 400px;
+            text-align: center;
+        }
+        .overlay-box h2 { margin-top: 0; margin-bottom: 2vh; color: #00C9FF; }
+        .overlay-box .form-group { text-align: left; }
+        .error-msg { color: #f12711; font-size: 0.85rem; margin-bottom: 1.5vh; min-height: 1.2rem; }
+
+        /* Responsive Media Queries */
+        .mobile-close-btn {
+            display: none; position: absolute; top: 1.5vh; right: 15px; 
+            background: none; border: none; color: #fff; font-size: 2rem; cursor: pointer;
+            z-index: 200;
+        }
+        .mobile-close-btn:hover { color: #00C9FF; }
+
+        @media screen and (max-width: 768px) {
+            body { flex-direction: column; }
+            #mobile-menu-btn { display: inline-block; }
+            .mobile-close-btn { display: block; }
+            .sidebar { 
+                position: fixed; left: -100%; top: 0; height: 100vh; height: 100dvh; width: 250px; 
+                transition: left 0.3s ease; 
+            }
+            .sidebar.open { left: 0; box-shadow: 10px 0 50px rgba(0,0,0,0.5); }
+            .main-content { padding: 2vh 4vw; }
+            h1 { font-size: 1.8rem; }
+            .summary-card { max-width: 100%; } /* Cards take full width on mobile */
+            .grid { grid-template-columns: 1fr; gap: 3vh; }
+        }
     </style>
 </head>
 <body>
-    <h1>System Dashboard</h1>
-    <div class="grid">
-        <div class="card">
-            <div class="card-header">CPU</div>
-            <div class="metric-row"><span class="metric-label">Usage</span><span class="metric-value" id="cpu-val">0%</span></div>
-            <div class="progress-bar-bg"><div class="progress-bar-fg cpu-fg" id="cpu-bar"></div></div>
-        </div>
-        <div class="card">
-            <div class="card-header">Memory</div>
-            <div class="metric-row"><span class="metric-label">Used / Total</span><span class="metric-value" id="mem-val">0 / 0 MB</span></div>
-            <div class="progress-bar-bg"><div class="progress-bar-fg mem-fg" id="mem-bar"></div></div>
-        </div>
-        <div class="card" style="grid-column: 1 / -1;">
-            <div class="card-header">Network Auto-Discovery</div>
-            <div style="overflow-x:auto;">
-                <table>
-                    <thead><tr><th>Interface</th><th>IP Address</th><th>MAC</th><th>RX (B/s)</th><th>TX (B/s)</th></tr></thead>
-                    <tbody id="net-tbody"></tbody>
-                </table>
+    <!-- Login Overlay -->
+    <div id="login-overlay" class="overlay">
+        <div class="overlay-box">
+            <h2 data-i18n="loginTitle">OS-Watchdog Login</h2>
+            <div id="login-error" class="error-msg"></div>
+            <div class="form-group">
+                <label data-i18n="username">Username</label>
+                <input type="text" id="login-username" value="admin">
             </div>
+            <div class="form-group">
+                <label data-i18n="password">Password</label>
+                <input type="password" id="login-password">
+            </div>
+            <button class="btn" onclick="doLogin()" data-i18n="loginBtn">Login</button>
         </div>
-        <div class="card" style="grid-column: 1 / -1;">
-            <div class="card-header">Disk I/O</div>
-            <div style="overflow-x:auto;">
-                <table>
-                    <thead><tr><th>Disk</th><th>Mount Point</th><th>Total</th><th>Available</th><th>Read IO (B/s)</th><th>Write IO (B/s)</th></tr></thead>
-                    <tbody id="disk-tbody"></tbody>
-                </table>
+    </div>
+
+    <!-- Force Password Change Overlay -->
+    <div id="pwd-overlay" class="overlay hidden">
+        <div class="overlay-box" style="border-color: #f12711;">
+            <h2 data-i18n="pwdTitle" style="color: #f12711;">Security Warning</h2>
+            <p style="font-size: 0.9rem; color: #ccc; margin-bottom: 2vh;" data-i18n="pwdMsg">You must change the default password before proceeding.</p>
+            <div id="pwd-error" class="error-msg"></div>
+            <div class="form-group">
+                <label data-i18n="newPassword">New Password</label>
+                <input type="password" id="new-password">
+            </div>
+            <div class="form-group">
+                <label data-i18n="confirmPassword">Confirm Password</label>
+                <input type="password" id="confirm-password">
+            </div>
+            <button class="btn" onclick="doChangePassword()" data-i18n="updatePwdBtn">Update Password</button>
+        </div>
+    </div>
+
+    <div class="sidebar" id="sidebar">
+        <button class="mobile-close-btn" onclick="toggleSidebar()">✕</button>
+        <h2 data-i18n="nodes">Nodes</h2>
+        
+        <div class="sidebar-actions">
+            <button class="btn" onclick="openModal()" data-i18n="addAgent">+ Add Remote Agent</button>
+        </div>
+
+        <ul class="node-list">
+            <li id="nav-overview" class="active" onclick="selectView('overview')">
+                <span data-i18n="overview">Overview</span>
+            </li>
+        </ul>
+        
+        <!-- flex-start layout to ensure compactness while allowing scrolling without pushing elements -->
+        <div id="sidebar-groups" style="flex: 1 1 auto; overflow-y:auto; display: flex; flex-direction: column; justify-content: flex-start; padding-bottom: 2vh;">
+            <!-- Grouped Nodes will be populated here -->
+        </div>
+
+        <!-- Fixed bottom language switch, flex-shrink:0 guarantees it doesn't get squished -->
+        <div style="flex-shrink: 0; padding: 1.5vh 0; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div class="lang-switch" style="margin-bottom: 0;">
+                <span id="lang-en" onclick="setLanguage('en')" class="active">EN</span>
+                <span>|</span>
+                <span id="lang-zh" onclick="setLanguage('zh')">中文</span>
             </div>
         </div>
     </div>
 
+    <div class="main-content">
+        <div class="header-row">
+            <h1>
+                <button id="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+                <span id="node-title" data-i18n="overview">Overview</span>
+            </h1>
+        </div>
+
+        <!-- Summary View -->
+        <div id="summary-view">
+            <div id="summary-container">
+            </div>
+        </div>
+
+        <!-- Detail View -->
+        <div id="detail-view" class="hidden">
+            <button id="btn-back" class="btn btn-small" onclick="selectView('overview')" data-i18n="backToOverview" style="margin-bottom: 2vh; width: auto;">Back to Overview</button>
+            
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2vh;">
+                <h1 id="detail-node-title" style="margin: 0;">Node Details</h1>
+                <div id="node-actions" class="hidden">
+                    <button class="btn btn-small" style="background:#f39c12; margin-right: 10px; width: auto;" onclick="openEditModal()" data-i18n="editBtn">Edit</button>
+                    <button class="btn btn-small" style="background:#e74c3c; width: auto;" onclick="deleteNode()" data-i18n="deleteBtn">Delete</button>
+                </div>
+            </div>
+            
+            <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));">
+                <div class="card">
+                    <div class="card-header" data-i18n="cpu">CPU</div>
+                    <div class="metric-row"><span class="metric-label" data-i18n="usage">Usage</span><span class="metric-value" id="cpu-val">0%</span></div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fg cpu-fg" id="cpu-bar"></div></div>
+                </div>
+                <div class="card">
+                    <div class="card-header" data-i18n="memory">Memory</div>
+                    <div class="metric-row"><span class="metric-label" data-i18n="usedTotal">Used / Total</span><span class="metric-value" id="mem-val">0 / 0 MB</span></div>
+                    <div class="progress-bar-bg"><div class="progress-bar-fg mem-fg" id="mem-bar"></div></div>
+                </div>
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="card-header" data-i18n="hardwareSensors">Hardware Sensors (Power & Temp)</div>
+                    <div class="metric-row"><span class="metric-label" data-i18n="cpuPower">CPU Package Power</span><span class="metric-value" id="power-val">- W</span></div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="sensorName">Sensor</th>
+                                    <th data-i18n="temperature">Temperature</th>
+                                </tr>
+                            </thead>
+                            <tbody id="temp-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="card-header" data-i18n="network">Network Interfaces</div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="interface">Interface</th>
+                                    <th data-i18n="ipAddr">IP Address</th>
+                                    <th data-i18n="mac">MAC</th>
+                                    <th data-i18n="rx">RX (B/s)</th>
+                                    <th data-i18n="tx">TX (B/s)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="net-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card" style="grid-column: 1 / -1;">
+                    <div class="card-header" data-i18n="disk">Disk I/O, Space & Health</div>
+                    <div style="overflow-x:auto;">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th data-i18n="diskType">Disk(Type)</th>
+                                    <th data-i18n="mountPoint">Mount Point</th>
+                                    <th data-i18n="totalSpace">Total</th>
+                                    <th data-i18n="availSpace">Available</th>
+                                    <th data-i18n="readIo">Read IO (B/s)</th>
+                                    <th data-i18n="writeIo">Write IO (B/s)</th>
+                                    <th data-i18n="smartTemp">SMART(Temp)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="disk-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Deploy Modal -->
+    <div id="deployModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2 style="margin-top:0" data-i18n="deployAgentTitle">Deploy Agent</h2>
+            <p style="font-size:0.85rem; color:#aaa;" data-i18n="deployAgentDesc">Distribute os-watchdog to a remote node via SSH. Environment will be prepped automatically.</p>
+            <div class="form-group">
+                <label data-i18n="hostLabel">Hostname / IP</label>
+                <input type="text" id="deploy-ip" placeholder="e.g. 192.168.1.100 or web.local">
+            </div>
+            <div class="form-group">
+                <label data-i18n="groupLabel">Group</label>
+                <input type="text" id="deploy-group" placeholder="e.g. Web Servers (Optional)">
+            </div>
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label data-i18n="sshPortLabel">SSH Port</label>
+                    <input type="number" id="deploy-ssh-port" value="22">
+                </div>
+                <div style="flex: 1;">
+                    <label data-i18n="agentPortLabel">Agent HTTP Port</label>
+                    <input type="number" id="deploy-port" value="30308">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0.5vh;">
+                <label data-i18n="authTypeLabel">Authentication Type</label>
+                <div style="display:flex; gap:10px; margin-bottom: 1vh;">
+                    <label style="color:#fff; font-size:0.85rem;"><input type="radio" name="auth-type" value="password" checked onchange="toggleAuthType()"> <span data-i18n="authPass">Password</span></label>
+                    <label style="color:#fff; font-size:0.85rem;"><input type="radio" name="auth-type" value="key" onchange="toggleAuthType()"> <span data-i18n="authKey">Private Key</span></label>
+                </div>
+            </div>
+            <div class="form-group" id="group-pass">
+                <label data-i18n="rootPassLabel">Root Password</label>
+                <input type="password" id="deploy-pass" placeholder="Root password">
+            </div>
+            <div class="form-group" id="group-key" style="display: none;">
+                <label data-i18n="privateKeyLabel">Private Key</label>
+                <textarea id="deploy-key" rows="4" placeholder="-----BEGIN PRIVATE KEY-----\n..." style="width: 100%; padding: 1.2vh; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: #fff; box-sizing: border-box; font-family: monospace; font-size:0.8rem;"></textarea>
+            </div>
+            <button class="btn" onclick="submitDeploy()" data-i18n="deployBtn">Deploy & Start Agent</button>
+            <div id="deploy-status"></div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeEditModal()">&times;</span>
+            <h2 style="margin-top:0" data-i18n="editAgentTitle">Edit Agent</h2>
+            <div class="form-group">
+                <label data-i18n="hostLabel">Hostname / IP</label>
+                <input type="text" id="edit-ip">
+            </div>
+            <div class="form-group">
+                <label data-i18n="groupLabel">Group</label>
+                <input type="text" id="edit-group">
+            </div>
+            <div class="form-group" style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <label data-i18n="sshPortLabel">SSH Port</label>
+                    <input type="number" id="edit-ssh-port">
+                </div>
+                <div style="flex: 1;">
+                    <label data-i18n="agentPortLabel">Agent HTTP Port</label>
+                    <input type="number" id="edit-port">
+                </div>
+            </div>
+            <div class="form-group" style="margin-bottom: 0.5vh;">
+                <label data-i18n="authTypeLabel">Authentication Type</label>
+                <div style="display:flex; gap:10px; margin-bottom: 1vh;">
+                    <label style="color:#fff; font-size:0.85rem;"><input type="radio" name="edit-auth-type" value="password" onchange="toggleEditAuthType()"> <span data-i18n="authPass">Password</span></label>
+                    <label style="color:#fff; font-size:0.85rem;"><input type="radio" name="edit-auth-type" value="key" onchange="toggleEditAuthType()"> <span data-i18n="authKey">Private Key</span></label>
+                </div>
+            </div>
+            <div class="form-group" id="edit-group-pass">
+                <label data-i18n="rootPassLabel">Root Password</label>
+                <input type="password" id="edit-pass" placeholder="*** (Leave blank to keep unchanged)">
+            </div>
+            <div class="form-group" id="edit-group-key" style="display: none;">
+                <label data-i18n="privateKeyLabel">Private Key</label>
+                <textarea id="edit-key" rows="4" placeholder="*** (Leave blank to keep unchanged)" style="width: 100%; padding: 1.2vh; border-radius: 6px; border: 1px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.2); color: #fff; box-sizing: border-box; font-family: monospace; font-size:0.8rem;"></textarea>
+            </div>
+            <button class="btn" onclick="submitEdit()" data-i18n="saveBtn">Save Changes</button>
+            <div id="edit-status"></div>
+        </div>
+    </div>
+
     <script>
+        // i18n Data
+        const i18n = {
+            en: {
+                overview: "Overview",
+                backToOverview: "Back to Overview",
+                viewDetails: "View Details",
+                statusOk: "All Systems Normal",
+                alertOffline: "Host Offline / Unreachable",
+                alertCpu: "CPU consistently >90%",
+                alertMem: "Memory consistently >90%",
+                alertSmart: "Disk SMART Warning",
+                hardwareSensors: "Hardware Sensors (Power & Temp)",
+                cpuPower: "CPU Package Power",
+                sensorName: "Sensor",
+                temperature: "Temperature",
+                nodes: "Nodes",
+                addAgent: "+ Add Remote Agent",
+                cpu: "CPU",
+                usage: "Usage",
+                memory: "Memory",
+                usedTotal: "Used / Total",
+                network: "Network Interfaces",
+                interface: "Interface",
+                ipAddr: "IP Address",
+                mac: "MAC",
+                rx: "RX (B/s)",
+                tx: "TX (B/s)",
+                disk: "Disk I/O, Space & Health",
+                diskType: "Disk(Type)",
+                mountPoint: "Mount Point",
+                totalSpace: "Total",
+                availSpace: "Available",
+                readIo: "Read IO (B/s)",
+                writeIo: "Write IO (B/s)",
+                smartTemp: "SMART(Temp)",
+                deployAgentTitle: "Deploy Agent",
+                deployAgentDesc: "Distribute os-watchdog to a remote node via SSH. Environment will be prepped automatically.",
+                hostLabel: "Hostname / IP",
+                groupLabel: "Group (Optional)",
+                sshPortLabel: "SSH Port",
+                agentPortLabel: "Agent HTTP Port",
+                rootPassLabel: "Root Password (Temp)",
+                deployBtn: "Deploy & Start Agent",
+                localMaster: "Local Master",
+                agentPrefix: "Agent",
+                deployReq: "Hostname/IP and Auth info are required.",
+                deployWait: "Deploying... Please wait (this may take up to a minute).",
+                deploySuccess: "Success: ",
+                deployFail: "Failed: ",
+                deployErr: "Error calling deploy API: ",
+                passOk: "OK",
+                passFail: "FAIL",
+                defaultGroup: "Default Group",
+                authTypeLabel: "Authentication Type",
+                authPass: "Password",
+                authKey: "Private Key",
+                privateKeyLabel: "Private Key (PEM format)",
+                loginTitle: "OS-Watchdog Login",
+                username: "Username",
+                password: "Password",
+                loginBtn: "Login",
+                pwdTitle: "Security Warning",
+                pwdMsg: "You must change the default password before proceeding.",
+                newPassword: "New Password",
+                confirmPassword: "Confirm Password",
+                updatePwdBtn: "Update Password",
+                editBtn: "Edit",
+                deleteBtn: "Delete",
+                saveBtn: "Save Changes",
+                editAgentTitle: "Edit Agent",
+                confirmDelete: "Are you sure you want to delete this agent?"
+            },
+            zh: {
+                overview: "全局概览",
+                backToOverview: "返回概览",
+                viewDetails: "查看详情",
+                statusOk: "系统运行正常",
+                alertOffline: "主机离线 / 无法连接",
+                alertCpu: "CPU持续占用>90%",
+                alertMem: "内存持续占用>90%",
+                alertSmart: "硬盘SMART健康警告",
+                hardwareSensors: "硬件传感器 (功耗与温度)",
+                cpuPower: "CPU 封装功耗",
+                sensorName: "传感器名称",
+                temperature: "温度",
+                nodes: "节点列表",
+                addAgent: "+ 添加远程主机",
+                cpu: "处理器 (CPU)",
+                usage: "使用率",
+                memory: "内存 (Memory)",
+                usedTotal: "已用 / 总共",
+                network: "网络接口",
+                interface: "网络接口",
+                ipAddr: "IP地址",
+                mac: "MAC地址",
+                rx: "接收 (B/s)",
+                tx: "发送 (B/s)",
+                disk: "磁盘 I/O, 空间与健康",
+                diskType: "磁盘(类型)",
+                mountPoint: "挂载点",
+                totalSpace: "总计",
+                availSpace: "可用",
+                readIo: "读取速度 (B/s)",
+                writeIo: "写入速度 (B/s)",
+                smartTemp: "SMART(温度)",
+                deployAgentTitle: "部署 Agent",
+                deployAgentDesc: "通过 SSH 自动配置环境并下发 os-watchdog 探针到远程节点。",
+                hostLabel: "主机名或 IP",
+                groupLabel: "所属分组 (选填)",
+                sshPortLabel: "SSH 端口",
+                agentPortLabel: "监控端口 (HTTP)",
+                rootPassLabel: "Root 密码 (临时)",
+                deployBtn: "部署并启动 Agent",
+                localMaster: "本地主控",
+                agentPrefix: "被控节点",
+                deployReq: "主机名/IP 和认证信息必填。",
+                deployWait: "正在部署... 请稍候 (可能需要最多一分钟)。",
+                deploySuccess: "成功: ",
+                deployFail: "失败: ",
+                deployErr: "调用部署接口错误: ",
+                passOk: "正常",
+                passFail: "故障",
+                defaultGroup: "默认分组",
+                authTypeLabel: "认证方式",
+                authPass: "密码",
+                authKey: "私钥",
+                privateKeyLabel: "私钥 (PEM 格式)",
+                loginTitle: "OS-Watchdog 登录",
+                username: "用户名",
+                password: "密码",
+                loginBtn: "登录",
+                pwdTitle: "安全警告",
+                pwdMsg: "继续操作前，必须修改默认的初始密码。",
+                newPassword: "新密码",
+                confirmPassword: "确认密码",
+                updatePwdBtn: "更新密码",
+                editBtn: "编辑",
+                deleteBtn: "删除",
+                saveBtn: "保存修改",
+                editAgentTitle: "编辑节点",
+                confirmDelete: "您确定要删除此节点吗？"
+            }
+        };
+
+        let currentLang = 'en';
+        let currentView = 'overview';
+
+        function setLanguage(lang) {
+            currentLang = lang;
+            document.getElementById('lang-en').className = lang === 'en' ? 'active' : '';
+            document.getElementById('lang-zh').className = lang === 'zh' ? 'active' : '';
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (i18n[lang][key]) el.innerText = i18n[lang][key];
+            });
+
+            nodes.forEach(n => {
+                if (n.id === 'local') n.name = i18n[lang].localMaster;
+                else if (n.name.startsWith(i18n['en'].agentPrefix) || n.name.startsWith(i18n['zh'].agentPrefix)) 
+                    n.name = `${i18n[lang].agentPrefix} (${n.ip})`;
+                
+                if (n.group === i18n['en'].defaultGroup || n.group === i18n['zh'].defaultGroup) {
+                    n.group = i18n[lang].defaultGroup;
+                }
+            });
+            
+            if (currentView === 'overview') {
+                document.getElementById('node-title').innerText = i18n[currentLang].overview;
+                renderSummaryView();
+            } else {
+                const node = nodes.find(n => n.id === currentView);
+                if (node) document.getElementById('detail-node-title').innerText = node.name;
+                renderDetailView(currentView);
+            }
+            renderNodeList();
+        }
+
+        let jwtToken = localStorage.getItem('os_jwt') || null;
+
+        async function authFetch(url, options = {}) {
+            if (!options.headers) options.headers = {};
+            if (jwtToken) {
+                options.headers['Authorization'] = 'Bearer ' + jwtToken;
+            }
+            const response = await fetch(url, options);
+            if (response.status === 401) {
+                jwtToken = null;
+                localStorage.removeItem('os_jwt');
+                document.getElementById('login-overlay').style.display = 'flex';
+            } else if (response.status === 403) {
+                document.getElementById('pwd-overlay').style.display = 'flex';
+                document.getElementById('pwd-overlay').classList.remove('hidden');
+            }
+            return response;
+        }
+
+        let nodes = [];
+
+        async function initNodes() {
+            try {
+                const res = await authFetch('/api/nodes');
+                if (res.ok) {
+                    const dbNodes = await res.json();
+                    nodes = dbNodes.map(n => ({
+                        id: 'node-' + n.id,
+                        db_id: n.id,
+                        name: n.hostname || `${i18n[currentLang].agentPrefix} (${n.ip})`,
+                        ip: n.ip,
+                        port: n.port || 30308,
+                        ssh_port: n.ssh_port || 22,
+                        auth_type: n.auth_type,
+                        active: false,
+                        status: 'offline',
+                        group: n.group_name || i18n[currentLang].defaultGroup,
+                        cpuHighCount: 0,
+                        memHighCount: 0,
+                        alerts: [],
+                        lastData: null
+                    }));
+                }
+            } catch (e) { console.error("Failed to load nodes", e); }
+            
+            if (!nodes.find(n => n.ip === '127.0.0.1')) {
+                nodes.unshift({ 
+                    id: 'local', name: i18n[currentLang].localMaster, ip: '127.0.0.1', port: 30308, ssh_port: 22,
+                    active: false, status: 'offline', group: i18n[currentLang].defaultGroup,
+                    cpuHighCount: 0, memHighCount: 0, alerts: [], lastData: null 
+                });
+            }
+        }
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            sb.classList.toggle('open');
+        }
+
+        function renderNodeList() {
+            const container = document.getElementById('sidebar-groups');
+            container.innerHTML = '';
+            
+            const groups = [...new Set(nodes.map(n => n.group))].sort();
+            
+            groups.forEach(groupName => {
+                const header = document.createElement('div');
+                header.className = 'group-header';
+                header.innerText = groupName;
+                container.appendChild(header);
+
+                const ul = document.createElement('ul');
+                ul.className = 'node-list';
+                ul.style.marginTop = '0';
+                
+                nodes.filter(n => n.group === groupName).forEach(node => {
+                    const li = document.createElement('li');
+                    if (node.active) li.className = 'active';
+                    li.innerHTML = `<span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width: 90%;">${node.name}</span> <div class="status-dot ${node.status}"></div>`;
+                    li.onclick = () => {
+                        selectView(node.id);
+                        if(window.innerWidth <= 768) toggleSidebar();
+                    };
+                    ul.appendChild(li);
+                });
+                container.appendChild(ul);
+            });
+        }
+
+        function selectView(id) {
+            currentView = id;
+            if (id === 'overview') {
+                document.getElementById('summary-view').classList.remove('hidden');
+                document.getElementById('detail-view').classList.add('hidden');
+                document.getElementById('node-title').innerText = i18n[currentLang].overview;
+                document.getElementById('nav-overview').className = 'active';
+                nodes.forEach(n => n.active = false);
+                renderSummaryView();
+            } else {
+                document.getElementById('summary-view').classList.add('hidden');
+                document.getElementById('detail-view').classList.remove('hidden');
+                const node = nodes.find(n => n.id === id);
+                document.getElementById('detail-node-title').innerText = node.name;
+                document.getElementById('nav-overview').className = '';
+                nodes.forEach(n => n.active = (n.id === id));
+                if (id === 'local') document.getElementById('node-actions').classList.add('hidden');
+                else document.getElementById('node-actions').classList.remove('hidden');
+                renderDetailView(id);
+            }
+            renderNodeList();
+        }
+
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
             const k = 1024; const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
@@ -82,42 +729,403 @@
             return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
         }
 
-        async function fetchMetrics() {
-            try {
-                const res = await fetch('/api/metrics');
-                const data = await res.json();
+        async function fetchAllMetrics() {
+            if (!jwtToken) return;
+            await Promise.allSettled(nodes.map(async node => {
+                try {
+                    const url = node.id === 'local' ? '/api/metrics' : `http://${node.ip}:${node.port}/api/metrics`;
+                    const res = await authFetch(url);
+                    if (!res.ok) throw new Error("HTTP Error");
+                    const data = await res.json();
+                    
+                    node.status = 'online';
+                    node.lastData = data;
+                    node.alerts = [];
+                    
+                    if (data.cpu_usage > 90.0) {
+                        node.cpuHighCount++;
+                        if (node.cpuHighCount >= 5) node.alerts.push(i18n[currentLang].alertCpu);
+                    } else { node.cpuHighCount = 0; }
+                    
+                    if ((data.mem_used / data.mem_total) > 0.9) {
+                        node.memHighCount++;
+                        if (node.memHighCount >= 5) node.alerts.push(i18n[currentLang].alertMem);
+                    } else { node.memHighCount = 0; }
+                    
+                    let hasSmartErr = false;
+                    data.disks.forEach(d => { if (d.smart_data && d.smart_data.passed === false) hasSmartErr = true; });
+                    if (hasSmartErr) node.alerts.push(i18n[currentLang].alertSmart);
+                    
+                } catch (e) {
+                    node.status = 'offline';
+                    node.alerts = [i18n[currentLang].alertOffline];
+                }
+            }));
+            
+            if (currentView === 'overview') renderSummaryView();
+            else renderDetailView(currentView);
+            renderNodeList();
+        }
+
+        function renderSummaryView() {
+            const container = document.getElementById('summary-container');
+            container.innerHTML = '';
+            
+            const groups = [...new Set(nodes.map(n => n.group))].sort();
+            
+            groups.forEach(groupName => {
+                const groupTitle = document.createElement('div');
+                groupTitle.className = 'summary-group-title';
+                groupTitle.innerText = groupName;
+                container.appendChild(groupTitle);
                 
-                document.getElementById('cpu-val').innerText = data.cpu_usage.toFixed(1) + '%';
-                document.getElementById('cpu-bar').style.width = data.cpu_usage + '%';
+                const grid = document.createElement('div');
+                grid.className = 'grid';
                 
-                const memTotalMB = (data.mem_total / 1024 / 1024).toFixed(0);
-                const memUsedMB = (data.mem_used / 1024 / 1024).toFixed(0);
-                document.getElementById('mem-val').innerText = `${memUsedMB} / ${memTotalMB} MB`;
-                document.getElementById('mem-bar').style.width = (data.mem_used / data.mem_total * 100) + '%';
-
-                const netTbody = document.getElementById('net-tbody');
-                netTbody.innerHTML = '';
-                data.networks.forEach(net => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `<td><span class="badge">${net.interface}</span></td><td>${net.ip}</td><td>${net.mac}</td><td>${formatBytes(net.rx_bytes_per_sec)}/s</td><td>${formatBytes(net.tx_bytes_per_sec)}/s</td>`;
-                    netTbody.appendChild(tr);
+                nodes.filter(n => n.group === groupName).forEach(node => {
+                    const card = document.createElement('div');
+                    card.className = 'card summary-card';
+                    
+                    let cpuStr = "0%", memStr = "0%";
+                    let netStr = "0 B/s";
+                    let alertsHtml = `<div class="alerts-area" style="color: #92FE9D">${i18n[currentLang].statusOk}</div>`;
+                    
+                    if (node.status === 'online' && node.lastData) {
+                        cpuStr = node.lastData.cpu_usage.toFixed(1) + '%';
+                        memStr = ((node.lastData.mem_used / node.lastData.mem_total) * 100).toFixed(1) + '%';
+                        
+                        let totalRx = 0, totalTx = 0;
+                        node.lastData.networks.forEach(net => { totalRx += net.rx_bytes_per_sec; totalTx += net.tx_bytes_per_sec; });
+                        netStr = `RX: ${formatBytes(totalRx)}/s<br>TX: ${formatBytes(totalTx)}/s`;
+                    }
+                    
+                    if (node.alerts && node.alerts.length > 0) {
+                        alertsHtml = `<div class="alerts-area" style="color: #f12711; font-weight: 600;">⚠ ${node.alerts.join('<br>⚠ ')}</div>`;
+                    }
+                    
+                    card.innerHTML = `
+                        <div class="card-header"><span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block; max-width:85%; vertical-align:middle;">${node.name}</span> <div class="status-dot ${node.status}" style="display:inline-block; margin-left:5px; vertical-align:middle;"></div></div>
+                        <div class="metric-row"><span class="metric-label" data-i18n="cpu">${i18n[currentLang].cpu}:</span><span class="metric-value">${cpuStr}</span></div>
+                        <div class="metric-row"><span class="metric-label" data-i18n="memory">${i18n[currentLang].memory}:</span><span class="metric-value">${memStr}</span></div>
+                        <div class="metric-row"><span class="metric-label" data-i18n="network">Net:</span><span class="metric-value" style="font-size:0.85rem; text-align:right;">${netStr}</span></div>
+                        ${alertsHtml}
+                        <button class="btn btn-small" onclick="selectView('${node.id}')" style="margin-top: 2vh;" data-i18n="viewDetails">${i18n[currentLang].viewDetails}</button>
+                    `;
+                    grid.appendChild(card);
                 });
+                
+                container.appendChild(grid);
+            });
+        }
 
-                const diskTbody = document.getElementById('disk-tbody');
-                diskTbody.innerHTML = '';
-                data.disks.forEach(disk => {
+        function renderDetailView(id) {
+            const node = nodes.find(n => n.id === id);
+            if (!node || !node.lastData) return;
+            const data = node.lastData;
+            
+            document.getElementById('cpu-val').innerText = data.cpu_usage.toFixed(1) + '%';
+            document.getElementById('cpu-bar').style.width = data.cpu_usage + '%';
+            
+            const memTotalMB = (data.mem_total / 1024 / 1024).toFixed(0);
+            const memUsedMB = (data.mem_used / 1024 / 1024).toFixed(0);
+            document.getElementById('mem-val').innerText = `${memUsedMB} / ${memTotalMB} MB`;
+            document.getElementById('mem-bar').style.width = (data.mem_used / data.mem_total * 100) + '%';
+
+            document.getElementById('power-val').innerText = data.power_w !== null && data.power_w !== undefined ? data.power_w.toFixed(2) + ' W' : '- W';
+
+            const tempTbody = document.getElementById('temp-tbody');
+            tempTbody.innerHTML = '';
+            if (data.temperatures && data.temperatures.length > 0) {
+                data.temperatures.forEach(comp => {
                     const tr = document.createElement('tr');
-                    tr.innerHTML = `<td><span class="badge">${disk.name}</span></td><td>${disk.mount_point || '-'}</td><td>${formatBytes(disk.total_space)}</td><td>${formatBytes(disk.available_space)}</td><td>${formatBytes(disk.read_bytes_per_sec)}/s</td><td>${formatBytes(disk.write_bytes_per_sec)}/s</td>`;
-                    diskTbody.appendChild(tr);
+                    tr.innerHTML = `<td><span class="badge">${comp.label}</span></td><td>${comp.temperature.toFixed(1)} °C</td>`;
+                    tempTbody.appendChild(tr);
                 });
+            } else {
+                tempTbody.innerHTML = `<tr><td colspan="2" style="text-align:center; color:#888;">No temperature sensors found</td></tr>`;
+            }
 
-            } catch (e) {
-                console.error('Failed to fetch metrics', e);
+            const netTbody = document.getElementById('net-tbody');
+            netTbody.innerHTML = '';
+            data.networks.forEach(net => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `<td><span class="badge">${net.interface}</span></td><td>${net.ip}</td><td>${net.mac}</td><td>${formatBytes(net.rx_bytes_per_sec)}/s</td><td>${formatBytes(net.tx_bytes_per_sec)}/s</td>`;
+                netTbody.appendChild(tr);
+            });
+
+            const diskTbody = document.getElementById('disk-tbody');
+            diskTbody.innerHTML = '';
+            data.disks.forEach(disk => {
+                const tr = document.createElement('tr');
+                const passText = disk.smart_data ? (disk.smart_data.passed ? i18n[currentLang].passOk : i18n[currentLang].passFail) : '';
+                const passColor = disk.smart_data ? (disk.smart_data.passed ? '#92FE9D' : '#f12711') : '';
+                const smartStr = disk.smart_data ? (`<span style="color:${passColor}">${passText}</span> ` + (disk.smart_data.temperature !== null ? disk.smart_data.temperature + '°C' : '')) : '-';
+                tr.innerHTML = `<td><span class="badge">${disk.name}</span> <span style="font-size:0.8em;color:#aaa">${disk.disk_type}</span></td><td>${disk.mount_point || '-'}</td><td>${formatBytes(disk.total_space)}</td><td>${formatBytes(disk.available_space)}</td><td>${formatBytes(disk.read_bytes_per_sec)}/s</td><td>${formatBytes(disk.write_bytes_per_sec)}/s</td><td>${smartStr}</td>`;
+                diskTbody.appendChild(tr);
+            });
+        }
+
+        const modal = document.getElementById("deployModal");
+        function openModal() { document.getElementById('deploy-status').innerText = ''; modal.style.display = "block"; }
+        function closeModal() { modal.style.display = "none"; }
+        
+        const editModal = document.getElementById("editModal");
+        function closeEditModal() { editModal.style.display = "none"; }
+
+        window.onclick = function(event) { 
+            if (event.target == modal) { closeModal(); } 
+            if (event.target == editModal) { closeEditModal(); }
+        }
+
+        function toggleAuthType() {
+            const val = document.querySelector('input[name="auth-type"]:checked').value;
+            if (val === 'key') {
+                document.getElementById('group-pass').style.display = 'none';
+                document.getElementById('group-key').style.display = 'block';
+            } else {
+                document.getElementById('group-pass').style.display = 'block';
+                document.getElementById('group-key').style.display = 'none';
             }
         }
 
-        setInterval(fetchMetrics, 1000);
-        fetchMetrics();
+        async function submitDeploy() {
+            const ip = document.getElementById('deploy-ip').value.trim();
+            const groupInput = document.getElementById('deploy-group').value.trim();
+            const port = parseInt(document.getElementById('deploy-port').value);
+            const sshPort = parseInt(document.getElementById('deploy-ssh-port').value);
+            const authType = document.querySelector('input[name="auth-type"]:checked').value;
+            const password = document.getElementById('deploy-pass').value;
+            const privateKey = document.getElementById('deploy-key').value;
+            const statusDiv = document.getElementById('deploy-status');
+
+            if (!ip || (authType === 'password' && !password) || (authType === 'key' && !privateKey)) {
+                statusDiv.innerText = i18n[currentLang].deployReq;
+                statusDiv.style.color = "#f12711";
+                return;
+            }
+
+            statusDiv.innerText = i18n[currentLang].deployWait;
+            statusDiv.style.color = "#00C9FF";
+
+            const payload = { ip, port, ssh_port: sshPort, auth_type: authType };
+            if (groupInput) payload.group_name = groupInput;
+            if (authType === 'password') payload.password = password;
+            if (authType === 'key') payload.private_key = privateKey;
+
+            try {
+                const res = await authFetch('/api/deploy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await res.json();
+                if (result.success) {
+                    statusDiv.innerText = i18n[currentLang].deploySuccess + result.message;
+                    statusDiv.style.color = "#92FE9D";
+                    
+                    setTimeout(() => {
+                        closeModal();
+                        initNodes().then(() => selectView('overview'));
+                    }, 1500);
+                } else {
+                    statusDiv.innerText = i18n[currentLang].deployFail + result.message;
+                    statusDiv.style.color = "#f12711";
+                }
+            } catch (e) {
+                statusDiv.innerText = i18n[currentLang].deployErr + e.message;
+                statusDiv.style.color = "#f12711";
+            }
+        }
+
+        function openEditModal() { 
+            const node = nodes.find(n => n.id === currentView);
+            if (!node || !node.db_id) return;
+            
+            document.getElementById('edit-ip').value = node.ip;
+            document.getElementById('edit-group').value = node.group === i18n[currentLang].defaultGroup ? "" : node.group;
+            document.getElementById('edit-port').value = node.port;
+            document.getElementById('edit-ssh-port').value = node.ssh_port || 22;
+            
+            const radios = document.getElementsByName('edit-auth-type');
+            for(let i=0; i<radios.length; i++){
+                if(radios[i].value === node.auth_type) radios[i].checked = true;
+            }
+            toggleEditAuthType();
+            
+            document.getElementById('edit-pass').value = '';
+            document.getElementById('edit-key').value = '';
+            document.getElementById('edit-status').innerText = '';
+            editModal.style.display = "block"; 
+        }
+
+        function toggleEditAuthType() {
+            const val = document.querySelector('input[name="edit-auth-type"]:checked').value;
+            if (val === 'key') {
+                document.getElementById('edit-group-pass').style.display = 'none';
+                document.getElementById('edit-group-key').style.display = 'block';
+            } else {
+                document.getElementById('edit-group-pass').style.display = 'block';
+                document.getElementById('edit-group-key').style.display = 'none';
+            }
+        }
+
+        async function submitEdit() {
+            const node = nodes.find(n => n.id === currentView);
+            if (!node || !node.db_id) return;
+
+            const ip = document.getElementById('edit-ip').value.trim();
+            const groupInput = document.getElementById('edit-group').value.trim();
+            const port = parseInt(document.getElementById('edit-port').value);
+            const sshPort = parseInt(document.getElementById('edit-ssh-port').value);
+            const authType = document.querySelector('input[name="edit-auth-type"]:checked').value;
+            const password = document.getElementById('edit-pass').value;
+            const privateKey = document.getElementById('edit-key').value;
+            const statusDiv = document.getElementById('edit-status');
+
+            if (!ip) {
+                statusDiv.innerText = i18n[currentLang].deployReq;
+                statusDiv.style.color = "#f12711";
+                return;
+            }
+
+            const payload = { 
+                ip, port, ssh_port: sshPort, auth_type: authType,
+                group_name: groupInput || null
+            };
+            
+            if (authType === 'password' && password) payload.auth_secret = password;
+            if (authType === 'key' && privateKey) payload.auth_secret = privateKey;
+
+            statusDiv.innerText = "Saving...";
+            statusDiv.style.color = "#00C9FF";
+
+            try {
+                const res = await authFetch(`/api/nodes/${node.db_id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                if (res.ok) {
+                    closeEditModal();
+                    await initNodes();
+                    selectView(currentView);
+                } else {
+                    statusDiv.innerText = 'Save failed';
+                    statusDiv.style.color = "#f12711";
+                }
+            } catch (e) {
+                statusDiv.innerText = 'Connection error';
+                statusDiv.style.color = "#f12711";
+            }
+        }
+
+        async function deleteNode() {
+            if (!confirm(i18n[currentLang].confirmDelete)) return;
+            const node = nodes.find(n => n.id === currentView);
+            if (!node || !node.db_id) return;
+            
+            try {
+                const res = await authFetch(`/api/nodes/${node.db_id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    nodes = nodes.filter(n => n.id !== currentView);
+                    selectView('overview');
+                } else {
+                    alert('Delete failed');
+                }
+            } catch (e) {
+                alert('Connection error');
+            }
+        }
+
+        // Auth Logic
+        async function doLogin() {
+            const user = document.getElementById('login-username').value;
+            const pass = document.getElementById('login-password').value;
+            const errDiv = document.getElementById('login-error');
+            errDiv.innerText = '';
+            
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: user, password: pass })
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    jwtToken = data.token;
+                    localStorage.setItem('os_jwt', jwtToken);
+                    document.getElementById('login-overlay').style.display = 'none';
+                    
+                    if (data.must_change_password) {
+                        document.getElementById('pwd-overlay').style.display = 'flex';
+                        document.getElementById('pwd-overlay').classList.remove('hidden');
+                    } else {
+                        startApp();
+                    }
+                } else {
+                    const err = await res.text();
+                    errDiv.innerText = err || "Login failed";
+                }
+            } catch (e) {
+                errDiv.innerText = "Connection error";
+            }
+        }
+
+        async function doChangePassword() {
+            const np = document.getElementById('new-password').value;
+            const cp = document.getElementById('confirm-password').value;
+            const errDiv = document.getElementById('pwd-error');
+            errDiv.innerText = '';
+
+            if (np.length < 5) {
+                errDiv.innerText = "Password too short"; return;
+            }
+            if (np !== cp) {
+                errDiv.innerText = "Passwords do not match"; return;
+            }
+
+            try {
+                const res = await fetch('/api/change_password', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + jwtToken },
+                    body: JSON.stringify({ new_password: np })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.token) {
+                        jwtToken = data.token;
+                        localStorage.setItem('os_jwt', jwtToken);
+                    }
+                    document.getElementById('pwd-overlay').style.display = 'none';
+                    startApp();
+                } else {
+                    errDiv.innerText = "Failed to update password";
+                }
+            } catch (e) {
+                errDiv.innerText = "Connection error";
+            }
+        }
+
+        // Initialization
+        setLanguage('zh');
+        
+        async function startApp() {
+            await initNodes();
+            selectView('overview');
+            fetchAllMetrics();
+            setInterval(fetchAllMetrics, 3000);
+        }
+
+        if (jwtToken) {
+            document.getElementById('login-overlay').style.display = 'none';
+            // Start app immediately, authFetch will handle 401/403 if token invalid
+            startApp();
+        } else {
+            document.getElementById('login-overlay').style.display = 'flex';
+        }
+
     </script>
 </body>
 </html>
